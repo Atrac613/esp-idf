@@ -48,6 +48,8 @@ enum {
     H4_TYPE_EVENT   = 4
 };
 
+int sequence_no = 0;
+
 static uint8_t hci_cmd_buf[128];
 
 /*
@@ -152,7 +154,7 @@ static void hci_cmd_send_ble_set_adv_param(void)
 {
     uint16_t adv_intv_min = 256; // 160ms
     uint16_t adv_intv_max = 256; // 160ms
-    uint8_t adv_type = 0; // connectable undirected advertising (ADV_IND)
+    uint8_t adv_type = 0x02; // ADV_SCAN_IND
     uint8_t own_addr_type = 0; // Public Device Address
     uint8_t peer_addr_type = 0; // Public Device Address
     uint8_t peer_addr[6] = {0x80, 0x81, 0x82, 0x83, 0x84, 0x85};
@@ -173,7 +175,7 @@ static void hci_cmd_send_ble_set_adv_param(void)
 
 static void hci_cmd_send_ble_set_adv_data(void)
 {
-    char *adv_name = "ESP-BLE-HELLO";
+    char *adv_name = "ESP-BLE-HELLO1";
     uint8_t name_len = (uint8_t)strlen(adv_name);
     uint8_t adv_data[31] = {0x02, 0x01, 0x06, 0x0, 0x09};
     uint8_t adv_data_len;
@@ -183,6 +185,16 @@ static void hci_cmd_send_ble_set_adv_data(void)
         adv_data[5 + i] = (uint8_t)adv_name[i];
     }
     adv_data_len = 5 + name_len;
+
+    uint8_t sensor_value[6] = {0x03, 0x00, 0x00, 0x00, 0x00, (uint8_t)sequence_no};
+    adv_data[adv_data_len] = 0x07; // Len
+    adv_data[adv_data_len + 1] = 0xFF; // Type
+
+    for (int i = 0; i < 6; i++) {
+        adv_data[adv_data_len + 2 + i] = (uint8_t)sensor_value[i]; // Data
+    }
+
+    adv_data_len = adv_data_len + 8;
 
     uint16_t sz = make_cmd_ble_set_adv_data(hci_cmd_buf, adv_data_len, (uint8_t *)adv_data);
     esp_vhci_host_send_packet(hci_cmd_buf, sz);
@@ -208,7 +220,17 @@ void bleAdvtTask(void *pvParameters)
             case 3: hci_cmd_send_ble_adv_start(); ++cmd_cnt; break;
             }
         }
-        printf("BLE Advertise, flag_send_avail: %d, cmd_sent: %d\n", send_avail, cmd_cnt);
+
+        if (cmd_cnt == 4) {
+            cmd_cnt = 2;
+        }
+
+        ++sequence_no;
+        if (cmd_cnt == 3 && sequence_no > 10) {
+            sequence_no = 0;
+        }
+
+        printf("BLE Advertise, flag_send_avail: %d, cmd_sent: %d, sequence_no: %d\n", send_avail, cmd_cnt, sequence_no);
     }
 }
 
